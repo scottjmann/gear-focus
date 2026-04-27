@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(@\\(\"public\\\\app.js\",\"public\\\\style.css\",\"public\\\\bis.js\"\\) | ForEach-Object { $lines = \\(Get-Content \"c:\\\\Users\\\\scott\\\\Apps\\\\project-one\\\\$_\"\\).Count; \"$lines $_\" })",
+      "Bash(node --check public/app.js)",
+      "Bash(curl -s http://localhost:3000/index.html)"
+    ]
+  }
+}

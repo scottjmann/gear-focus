@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gear Focus</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div id="app">
+
+    <!-- Header -->
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="header-title">
+          <span class="spec-icon" id="spec-icon">⚔️</span>
+          <div>
+            <h1 id="header-spec-name">Gear Focus</h1>
+            <p class="subtitle">Midnight Season 1 (Patch 12.0.5)</p>
+          </div>
+        </div>
+        <button id="refresh-btn" class="btn-refresh" title="Refresh from Blizzard API">↺ Refresh</button>
+      </div>
+    </header>
+
+    <!-- Character Switcher — always visible -->
+    <div id="char-switcher" class="char-switcher">
+      <div class="char-switcher-inner">
+        <div class="char-tabs" id="char-tabs"></div>
+        <button class="char-add-btn" id="char-add-btn" title="Add a character">＋ Add Character</button>
+      </div>
+    </div>
+
+    <!-- Add / Edit Character form (hidden by default) -->
+    <div id="char-form-wrap" class="char-form-wrap hidden">
+      <div class="char-form-inner">
+        <form id="char-form" class="char-form" autocomplete="off">
+          <div class="char-form-fields">
+            <div class="char-field">
+              <label for="input-char-name">Character Name</label>
+              <input id="input-char-name" type="text" placeholder="e.g. Scrott" spellcheck="false" required />
+            </div>
+            <div class="char-field">
+              <label for="input-char-realm">Realm</label>
+              <input id="input-char-realm" type="text" placeholder="e.g. emeriss" spellcheck="false" required />
+            </div>
+            <div class="char-field">
+              <label for="input-char-region">Region</label>
+              <select id="input-char-region">
+                <option value="eu">EU</option>
+                <option value="us">US</option>
+                <option value="kr">KR</option>
+                <option value="tw">TW</option>
+              </select>
+            </div>
+          </div>
+          <div class="char-form-actions">
+            <button type="submit" class="btn-char-save">Save &amp; Load</button>
+            <button type="button" class="btn-char-cancel" id="char-form-cancel">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading-screen" class="loading-screen">
+      <div class="loading-orb"></div>
+      <p>Communing with the Void...</p>
+    </div>
+
+    <!-- Error -->
+    <div id="error-screen" class="error-screen hidden">
+      <div class="error-box">
+        <span class="error-icon">⚠</span>
+        <h2 id="error-title">Failed to load character data</h2>
+        <p id="error-message"></p>
+        <p class="error-hint" id="error-hint">Check the character name, realm, and region are correct.</p>
+        <div class="error-actions">
+          <button class="btn-refresh" id="error-retry-btn">Try Again</button>
+          <button class="btn-char-cancel" id="error-remove-btn" style="display:none">Remove &amp; Re-add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- iLvl warning banner -->
+    <div id="ilvl-warning" class="ilvl-warning hidden">
+      ⚠ Item levels are not yet confirmed for Midnight 12.0.5. ilvl comparison is disabled — item names and sources are correct.
+      Fill in <code>ilvl</code> and <code>itemId</code> values in <code>bis.js</code> from Wowhead to re-enable it.
+    </div>
+
+    <!-- Main content -->
+    <main id="main-content" class="hidden">
+
+      <!-- Character banner -->
+      <section class="character-banner">
+        <div class="character-avatar-wrap">
+          <img id="char-avatar" src="" alt="Character" class="character-avatar hidden" />
+          <div id="char-avatar-fallback" class="avatar-fallback">🧙</div>
+        </div>
+        <div class="character-info">
+          <h2 id="char-name" class="character-name">—</h2>
+          <p id="char-details" class="character-details">—</p>
+          <div class="ilvl-badges">
+            <div class="ilvl-badge">
+              <span class="ilvl-label">Equipped iLvl</span>
+              <span id="char-ilvl-equipped" class="ilvl-value">—</span>
+            </div>
+            <div class="ilvl-badge">
+              <span class="ilvl-label">BiS iLvl</span>
+              <span id="bis-avg-ilvl" class="ilvl-value gold">—</span>
+            </div>
+            <div class="ilvl-badge">
+              <span class="ilvl-label">Gap</span>
+              <span id="ilvl-gap" class="ilvl-value red">—</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BiS Progress -->
+      <section class="progress-section" id="progress-section">
+        <div class="progress-header">
+          <span class="progress-title">📊 BiS Progress</span>
+          <span id="progress-pct-label" class="progress-pct">—</span>
+        </div>
+        <div class="progress-bar-outer">
+          <div id="bis-progress-bar-inner" class="progress-bar-inner" style="width:0%"></div>
+        </div>
+        <div id="progress-breakdown" class="progress-breakdown"></div>
+      </section>
+
+      <!-- Raid Progress -->
+      <section class="gear-section" id="raids-section" style="display:none">
+        <h2 class="section-title">
+          <span class="section-icon">⚔</span>
+          Raid Progress
+          <span class="section-subtitle" id="raids-expansion-label"></span>
+          <div class="raid-diff-tabs" id="raids-diff-tabs"></div>
+        </h2>
+        <div id="raids-boss-list" class="raids-boss-list"></div>
+      </section>
+
+      <!-- Currencies -->
+      <section class="currency-section" id="currency-section" style="display:none">
+        <h2 class="section-title">
+          <span class="section-icon">💰</span>
+          Wallet
+          <span class="section-subtitle">Currencies with a balance</span>
+          <button id="currency-toggle" class="btn-currency-toggle" title="Expand / collapse">▾</button>
+        </h2>
+        <div id="currency-grid" class="currency-grid"></div>
+      </section>
+
+      <!-- Upgrade Advisor -->
+      <section class="gear-section" id="advisor-section" style="display:none">
+        <h2 class="section-title">
+          <span class="section-icon">⬆</span>
+          Upgrade Path
+          <span class="section-subtitle">Best uses for your crests</span>
+        </h2>
+        <div id="advisor-currency-summary" class="advisor-currency-summary"></div>
+        <div id="advisor-list"></div>
+      </section>
+
+      <!-- Panel + Targets row -->
+      <div class="panel-and-targets">
+
+        <!-- Character Panel -->
+        <section class="gear-section">
+          <h2 class="section-title" id="gear-section-title">
+            <span class="section-icon">⚔</span>
+            Gear Comparison
+            <div class="tier-tabs" id="tier-tabs">
+              <button class="tier-tab active" data-tier="myth" onclick="switchTier('myth')">Myth BiS</button>
+              <button class="tier-tab" data-tier="hero" onclick="switchTier('hero')">Hero BiS</button>
+            </div>
+            <div class="gear-legend" id="gear-legend">
+              <span class="legend-dot green"></span><span>BiS</span>
+              <span class="legend-dot yellow"></span><span>&lt;10 ilvls behind</span>
+              <span class="legend-dot red"></span><span>Upgrade needed</span>
+            </div>
+          </h2>
+          <div id="char-panel" class="char-panel"></div>
+        </section>
+
+        <!-- Next Focus -->
+        <section class="targets-section">
+          <h2 class="section-title">
+            <span class="section-icon">🎯</span>
+            Next Focus
+            <span class="section-subtitle">Top upgrades to prioritise</span>
+          </h2>
+          <div id="targets-list" class="targets-list"></div>
+        </section>
+
+      </div>
+
+    </main>
+
+    <footer class="site-footer">
+      BiS data for Midnight Season 1 (Patch 12.0.5). Verify current rankings at
+      <a href="https://www.icy-veins.com/wow" target="_blank" rel="noopener" class="footer-link">Icy Veins</a> or
+      <a href="https://www.wowhead.com/guides/classes" target="_blank" rel="noopener" class="footer-link">Wowhead</a>.
+    </footer>
+
+  </div>
+
+  <div id="panel-tooltip" class="panel-tooltip hidden"></div>
+
+  <script src="bis.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

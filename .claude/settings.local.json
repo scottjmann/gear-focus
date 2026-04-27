@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.icy-veins.com)",
+      "WebFetch(domain:www.wowhead.com)",
+      "WebSearch",
+      "Bash(node -e \"const fs=require\\('fs'\\); ['public/app.js','public/style.css','public/bis.js'].forEach\\(f => { const lines = fs.readFileSync\\('c:/Users/scott/Apps/project-one/'+f,'utf8'\\).split\\('\\\\n'\\).length; console.log\\(lines, f\\); }\\)\")"
+    ]
+  }
+}

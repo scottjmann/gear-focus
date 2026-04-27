@@ -1,0 +1,14 @@
+{
+  "name": "gear-focus",
+  "version": "1.0.0",
+  "description": "WoW gear planner — track BiS progress across any spec and class",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-fetch": "^2.7.0"
+  }
+}
