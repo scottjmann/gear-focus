@@ -656,6 +656,75 @@ function switchTier(tier) {
   renderCharacterPanel(comparisons, _character, _focusSourceMap);
 }
 
+// ── Mythic+ Progress ──────────────────────────────────────────────
+
+const KEY_LEVEL_CLASS = (lvl) => {
+  if (lvl >= 20) return 'key-legendary';
+  if (lvl >= 15) return 'key-epic';
+  if (lvl >= 10) return 'key-rare';
+  if (lvl >=  5) return 'key-uncommon';
+  return 'key-common';
+};
+
+const MKP_RATING_CLASS = (r) => {
+  if (r >= 2500) return 'mkp-legendary';
+  if (r >= 2000) return 'mkp-epic';
+  if (r >= 1500) return 'mkp-rare';
+  if (r >= 1000) return 'mkp-uncommon';
+  return 'mkp-common';
+};
+
+function renderMythicPlus(mythicPlus) {
+  const section = document.getElementById('mkp-section');
+  if (!mythicPlus) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const badge = document.getElementById('mkp-rating-badge');
+  badge.textContent  = mythicPlus.rating > 0 ? `${mythicPlus.rating.toLocaleString()} Rating` : 'No rating yet';
+  badge.className    = `mkp-rating-badge ${MKP_RATING_CLASS(mythicPlus.rating)}`;
+
+  const grid   = document.getElementById('mkp-dungeon-grid');
+  grid.innerHTML = '';
+
+  if (!mythicPlus.dungeons.length) {
+    grid.appendChild(el('div', 'mkp-no-data', 'No runs recorded this season yet.'));
+    return;
+  }
+
+  const region = getActiveChar()?.region || 'eu';
+
+  for (const dungeon of mythicPlus.dungeons) {
+    const card    = el('div', 'mkp-dungeon-card');
+    const overlay = el('div', 'mkp-card-overlay');
+
+    overlay.appendChild(el('div', 'mkp-dungeon-name', escHtml(dungeon.name)));
+
+    const keyRow = el('div', 'mkp-key-row');
+    keyRow.appendChild(el('span', `mkp-key-level ${KEY_LEVEL_CLASS(dungeon.keystoneLevel)}`, `+${dungeon.keystoneLevel}`));
+    keyRow.appendChild(el('span', `mkp-timed-badge ${dungeon.isTimed ? 'timed' : 'overtime'}`,
+      dungeon.isTimed ? '✓ Timed' : '⏱ Overtime'));
+    overlay.appendChild(keyRow);
+
+    if (dungeon.rating > 0) {
+      overlay.appendChild(el('div', 'mkp-dungeon-pts', `+${dungeon.rating} pts`));
+    }
+
+    card.appendChild(overlay);
+    grid.appendChild(card);
+
+    // Lazy-load dungeon artwork
+    fetch(`/api/dungeon-media?id=${dungeon.id}&region=${region}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.imageUrl) {
+          card.style.backgroundImage = `url(${data.imageUrl})`;
+          card.classList.add('has-image');
+        }
+      })
+      .catch(() => {});
+  }
+}
+
 // ── Raid Progress ─────────────────────────────────────────────────
 
 function switchRaidDiff(diff) {
@@ -752,7 +821,7 @@ function renderRaidBosses() {
   }
 }
 
-function renderApp({ character, equipment, currencies = [], raids = null }) {
+function renderApp({ character, equipment, currencies = [], raids = null, mythicPlus = null }) {
   _character  = character;
   _currencies = currencies;
 
@@ -793,6 +862,7 @@ function renderApp({ character, equipment, currencies = [], raids = null }) {
   renderCharacterPanel(activeTier === 'hero' ? _heroComparisons : _mythComparisons, character, _focusSourceMap);
   renderCurrencies(currencies);
   renderRaids(raids);
+  renderMythicPlus(mythicPlus);
 }
 
 // ── Currencies ────────────────────────────────────────────────────

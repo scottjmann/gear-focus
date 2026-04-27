@@ -6,7 +6,8 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const tokenCache = {}; // region → { token, expiresAt }
+const tokenCache       = {}; // region → { token, expiresAt }
+const dungeonMediaCache = {}; // "region-dungeonId" → { imageUrl }
 
 async function getBattleNetToken(region = 'eu') {
   const entry = tokenCache[region];
@@ -61,12 +62,13 @@ app.get('/api/character', async (req, res) => {
     const locale = 'en_US';
     const headers = { Authorization: `Bearer ${token}` };
 
-    const [profileRes, equipRes, mediaRes, currencyRes, raidsRes] = await Promise.all([
+    const [profileRes, equipRes, mediaRes, currencyRes, raidsRes, mkpRes] = await Promise.all([
       fetch(`${base}/profile/wow/character/${realm}/${character}?namespace=${ns}&locale=${locale}`, { headers }),
       fetch(`${base}/profile/wow/character/${realm}/${character}/equipment?namespace=${ns}&locale=${locale}`, { headers }),
       fetch(`${base}/profile/wow/character/${realm}/${character}/character-media?namespace=${ns}&locale=${locale}`, { headers }),
       fetch(`${base}/profile/wow/character/${realm}/${character}/currencies?namespace=${ns}&locale=${locale}`, { headers }),
       fetch(`${base}/profile/wow/character/${realm}/${character}/encounters/raids?namespace=${ns}&locale=${locale}`, { headers }),
+      fetch(`${base}/profile/wow/character/${realm}/${character}/mythic-keystone-profile?namespace=${ns}&locale=${locale}`, { headers }),
     ]);
 
     if (!profileRes.ok) {
@@ -128,6 +130,37 @@ app.get('/api/character', async (req, res) => {
       }
     }
 
+    // Mythic+ profile — non-fatal
+    let mythicPlus = null;
+    if (mkpRes.ok) {
+      const mkp    = await mkpRes.json();
+      const rating = Math.round(mkp.current_mythic_rating?.rating ?? 0);
+      const runs   = mkp.best_runs || mkp.current_period?.best_runs || [];
+
+      const dungeonMap = new Map();
+      for (const run of runs) {
+        const id = run.dungeon?.id;
+        if (!id) continue;
+        const prev = dungeonMap.get(id);
+        if (!prev || run.keystone_level > prev.keystoneLevel) {
+          dungeonMap.set(id, {
+            id,
+            name:          run.dungeon?.name || '',
+            keystoneLevel: run.keystone_level || 0,
+            isTimed:       run.is_completed_within_time ?? false,
+            rating:        Math.round(run.mythic_rating?.rating ?? 0),
+          });
+        }
+      }
+
+      if (dungeonMap.size > 0 || rating > 0) {
+        mythicPlus = {
+          rating,
+          dungeons: [...dungeonMap.values()].sort((a, b) => b.rating - a.rating),
+        };
+      }
+    }
+
     res.json({
       character: {
         name: profile.name,
@@ -144,6 +177,7 @@ app.get('/api/character', async (req, res) => {
       equipment: equipment.equipped_items || [],
       currencies,
       raids,
+      mythicPlus,
     });
   } catch (err) {
     console.error('[API Error]', err.message);
@@ -185,6 +219,55 @@ app.get('/api/item-stats', async (req, res) => {
   } catch (err) {
     console.error('[Item Stats]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Fetches dungeon tile artwork via keystone dungeon → journal instance → media.
+// Results are cached in-memory for the lifetime of the server process.
+app.get('/api/dungeon-media', async (req, res) => {
+  const dungeonId = parseInt(req.query.id, 10);
+  const region    = (req.query.region || 'eu').toLowerCase();
+  if (!dungeonId) return res.json({ imageUrl: null });
+
+  const cacheKey = `${region}-${dungeonId}`;
+  if (dungeonMediaCache[cacheKey]) return res.json(dungeonMediaCache[cacheKey]);
+
+  const store = (imageUrl) => {
+    dungeonMediaCache[cacheKey] = { imageUrl };
+    return res.json({ imageUrl });
+  };
+
+  try {
+    const token   = await getBattleNetToken(region);
+    const base    = `https://${region}.api.blizzard.com`;
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Step 1: keystone dungeon → journal instance ID
+    const dungRes = await fetch(
+      `${base}/data/wow/mythic-keystone/dungeon/${dungeonId}?namespace=dynamic-${region}&locale=en_US`,
+      { headers }
+    );
+    if (!dungRes.ok) return store(null);
+
+    const dungData         = await dungRes.json();
+    const journalInstanceId = dungData.dungeon?.id;
+    if (!journalInstanceId) return store(null);
+
+    // Step 2: journal instance media
+    const medRes = await fetch(
+      `${base}/data/wow/journal-instance/${journalInstanceId}/media?namespace=static-${region}&locale=en_US`,
+      { headers }
+    );
+    if (!medRes.ok) return store(null);
+
+    const medData  = await medRes.json();
+    const imageUrl = medData.assets?.find(a => a.key === 'tile')?.value
+                  || medData.assets?.[0]?.value
+                  || null;
+    return store(imageUrl);
+  } catch (err) {
+    console.error('[Dungeon Media]', err.message);
+    return store(null);
   }
 });
 
