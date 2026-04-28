@@ -230,44 +230,52 @@ app.get('/api/dungeon-media', async (req, res) => {
   if (!dungeonId) return res.json({ imageUrl: null });
 
   const cacheKey = `${region}-${dungeonId}`;
-  if (dungeonMediaCache[cacheKey]) return res.json(dungeonMediaCache[cacheKey]);
-
-  const store = (imageUrl) => {
-    dungeonMediaCache[cacheKey] = { imageUrl };
-    return res.json({ imageUrl });
-  };
+  // Only serve from cache on success — don't cache failures so retries can work
+  if (dungeonMediaCache[cacheKey]?.imageUrl) return res.json(dungeonMediaCache[cacheKey]);
 
   try {
     const token   = await getBattleNetToken(region);
     const base    = `https://${region}.api.blizzard.com`;
     const headers = { Authorization: `Bearer ${token}` };
 
-    // Step 1: keystone dungeon → journal instance ID
-    const dungRes = await fetch(
-      `${base}/data/wow/mythic-keystone/dungeon/${dungeonId}?namespace=dynamic-${region}&locale=en_US`,
-      { headers }
-    );
-    if (!dungRes.ok) return store(null);
+    // Step 1: keystone dungeon data — try dynamic namespace, fall back to static
+    let dungData = null;
+    for (const ns of [`dynamic-${region}`, `static-${region}`]) {
+      const r = await fetch(
+        `${base}/data/wow/mythic-keystone/dungeon/${dungeonId}?namespace=${ns}&locale=en_US`,
+        { headers }
+      );
+      if (r.ok) { dungData = await r.json(); break; }
+    }
+    if (!dungData) return res.json({ imageUrl: null });
 
-    const dungData         = await dungRes.json();
+    // Step 2: journal instance media for the tile artwork
     const journalInstanceId = dungData.dungeon?.id;
-    if (!journalInstanceId) return store(null);
+    let imageUrl = null;
 
-    // Step 2: journal instance media
-    const medRes = await fetch(
-      `${base}/data/wow/journal-instance/${journalInstanceId}/media?namespace=static-${region}&locale=en_US`,
-      { headers }
-    );
-    if (!medRes.ok) return store(null);
+    if (journalInstanceId) {
+      const medRes = await fetch(
+        `${base}/data/wow/journal-instance/${journalInstanceId}/media?namespace=static-${region}&locale=en_US`,
+        { headers }
+      );
+      if (medRes.ok) {
+        const medData = await medRes.json();
+        imageUrl = medData.assets?.find(a => a.key === 'tile')?.value
+                || medData.assets?.[0]?.value
+                || null;
+      }
+    }
 
-    const medData  = await medRes.json();
-    const imageUrl = medData.assets?.find(a => a.key === 'tile')?.value
-                  || medData.assets?.[0]?.value
-                  || null;
-    return store(imageUrl);
+    // Fallback: Blizzard zone render CDN using the map ID
+    if (!imageUrl && dungData.map?.id) {
+      imageUrl = `https://render.worldofwarcraft.com/${region}/zones/${dungData.map.id}-wide.jpg`;
+    }
+
+    if (imageUrl) dungeonMediaCache[cacheKey] = { imageUrl };
+    return res.json({ imageUrl });
   } catch (err) {
     console.error('[Dungeon Media]', err.message);
-    return store(null);
+    return res.json({ imageUrl: null });
   }
 });
 

@@ -705,10 +705,6 @@ function renderMythicPlus(mythicPlus) {
       dungeon.isTimed ? '✓ Timed' : '⏱ Overtime'));
     overlay.appendChild(keyRow);
 
-    if (dungeon.rating > 0) {
-      overlay.appendChild(el('div', 'mkp-dungeon-pts', `+${dungeon.rating} pts`));
-    }
-
     card.appendChild(overlay);
     grid.appendChild(card);
 
@@ -781,41 +777,30 @@ function renderRaidBosses() {
   list.innerHTML = '';
 
   for (const inst of _raids.instances) {
-    const mode   = inst.modes.find(m => m.difficulty === _raidDiff);
+    const mode = inst.modes.find(m => m.difficulty === _raidDiff);
+
+    // Skip instances with no attempts or zero kills on this difficulty
+    if (!mode || mode.completed === 0) continue;
+
     const instEl = el('div', 'raid-instance');
 
     // Header: raid name + X/Y badge
-    const header = el('div', 'raid-instance-header');
+    const header  = el('div', 'raid-instance-header');
+    const cleared = mode.completed >= mode.total && mode.total > 0;
     header.appendChild(el('span', 'raid-instance-name', escHtml(inst.name)));
-    if (mode) {
-      const cleared = mode.completed >= mode.total && mode.total > 0;
-      header.appendChild(el('span',
-        `raid-progress-badge${cleared ? ' cleared' : ''}`,
-        `${mode.completed}/${mode.total}`
-      ));
-    } else {
-      header.appendChild(el('span', 'raid-progress-badge not-attempted', '—'));
-    }
+    header.appendChild(el('span', `raid-progress-badge${cleared ? ' cleared' : ''}`,
+      `${mode.completed}/${mode.total}`));
     instEl.appendChild(header);
 
     // Boss list
-    if (mode?.bosses.length) {
-      const grid = el('div', 'raid-boss-grid');
-      for (const boss of mode.bosses) {
-        const bossEl = el('div', `raid-boss${boss.killed ? ' killed' : ''}`);
-        bossEl.appendChild(el('span', 'raid-boss-icon', boss.killed ? '✓' : '·'));
-        bossEl.appendChild(el('span', 'raid-boss-name', escHtml(boss.name)));
-        if (boss.killed && boss.lastKill) {
-          const daysAgo = Math.floor((Date.now() - boss.lastKill * 1000) / 86400000);
-          const when    = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`;
-          bossEl.appendChild(el('span', 'raid-boss-date', when));
-        }
-        grid.appendChild(bossEl);
-      }
-      instEl.appendChild(grid);
-    } else if (!mode) {
-      instEl.appendChild(el('div', 'raid-no-data', 'No attempts on this difficulty'));
+    const grid = el('div', 'raid-boss-grid');
+    for (const boss of mode.bosses) {
+      const bossEl = el('div', `raid-boss${boss.killed ? ' killed' : ''}`);
+      bossEl.appendChild(el('span', 'raid-boss-icon', boss.killed ? '✓' : '·'));
+      bossEl.appendChild(el('span', 'raid-boss-name', escHtml(boss.name)));
+      grid.appendChild(bossEl);
     }
+    instEl.appendChild(grid);
 
     list.appendChild(instEl);
   }
